@@ -557,7 +557,7 @@ import { format } from "d3-format";
       this._mouseHeightFocusLabelTextElev
         .attr("x", layerPoint.x + 5)
         .attr("y", normalizedY + 12)
-        .text(height * 3.281 + " ft")
+        .text((height * 3.281).toFixed(0) + " ft")
         .attr("class", "tspan mouse-height-box-text");
       this._mouseHeightFocusLabelTextType
         .attr("x", layerPoint.x + 5)
@@ -711,8 +711,10 @@ import { format } from "d3-format";
           .attr("y", eventY <= 10 ? 0 : eventY > maxY ? maxY - 10 : eventY - 10)
           .text(
             format(".0f")(
-              self._y.invert(eventY < 0 ? 0 : eventY > maxY ? maxY : eventY) *
+              (
+                self._y.invert(eventY < 0 ? 0 : eventY > maxY ? maxY : eventY) *
                 3.281
+              ).toFixed(0)
             ) + " ft"
           );
         self._removeMarkedSegmentsOnMap();
@@ -802,7 +804,7 @@ import { format } from "d3-format";
       );
       this._yAxis = axisLeft()
         .scale(this._y)
-        .tickFormat((d) => d * 3.281 + " ft");
+        .tickFormat((d) => (d * 3.281).toFixed(0) + " ft");
       this._yAxis.ticks(
         this.options.yTicks
           ? Math.pow(2, this.options.yTicks)
@@ -1239,7 +1241,7 @@ import { format } from "d3-format";
         this._showMapMarker(ll, alt, type);
       }
       this._distTspan.text(" " + (dist / 1.852).toFixed(1) + "nm");
-      this._altTspan.text(" " + alt * 3.281 + " ft");
+      this._altTspan.text(" " + (alt * 3.281).toFixed(0) + " ft");
       this._areaTspan.text(" " + (areaLength / 1.852).toFixed(1) + " nm");
       this._typeTspan.text(" " + type);
       this._focusRect.attr("width", boxWidth);
