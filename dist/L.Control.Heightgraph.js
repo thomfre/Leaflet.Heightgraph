@@ -2890,6 +2890,176 @@ selection.prototype.properties = selection_properties;
 transition.prototype.attrs = transition_attrs;
 transition.prototype.styles = transition_styles;
 
+var slice = Array.prototype.slice;
+
+function identity$1(x) {
+  return x;
+}
+
+var top = 1,
+    right = 2,
+    bottom = 3,
+    left = 4,
+    epsilon = 1e-6;
+
+function translateX(x) {
+  return "translate(" + (x + 0.5) + ",0)";
+}
+
+function translateY(y) {
+  return "translate(0," + (y + 0.5) + ")";
+}
+
+function number(scale) {
+  return function(d) {
+    return +scale(d);
+  };
+}
+
+function center(scale) {
+  var offset = Math.max(0, scale.bandwidth() - 1) / 2; // Adjust for 0.5px offset.
+  if (scale.round()) offset = Math.round(offset);
+  return function(d) {
+    return +scale(d) + offset;
+  };
+}
+
+function entering() {
+  return !this.__axis;
+}
+
+function axis(orient, scale) {
+  var tickArguments = [],
+      tickValues = null,
+      tickFormat = null,
+      tickSizeInner = 6,
+      tickSizeOuter = 6,
+      tickPadding = 3,
+      k = orient === top || orient === left ? -1 : 1,
+      x = orient === left || orient === right ? "x" : "y",
+      transform = orient === top || orient === bottom ? translateX : translateY;
+
+  function axis(context) {
+    var values = tickValues == null ? (scale.ticks ? scale.ticks.apply(scale, tickArguments) : scale.domain()) : tickValues,
+        format = tickFormat == null ? (scale.tickFormat ? scale.tickFormat.apply(scale, tickArguments) : identity$1) : tickFormat,
+        spacing = Math.max(tickSizeInner, 0) + tickPadding,
+        range = scale.range(),
+        range0 = +range[0] + 0.5,
+        range1 = +range[range.length - 1] + 0.5,
+        position = (scale.bandwidth ? center : number)(scale.copy()),
+        selection = context.selection ? context.selection() : context,
+        path = selection.selectAll(".domain").data([null]),
+        tick = selection.selectAll(".tick").data(values, scale).order(),
+        tickExit = tick.exit(),
+        tickEnter = tick.enter().append("g").attr("class", "tick"),
+        line = tick.select("line"),
+        text = tick.select("text");
+
+    path = path.merge(path.enter().insert("path", ".tick")
+        .attr("class", "domain")
+        .attr("stroke", "currentColor"));
+
+    tick = tick.merge(tickEnter);
+
+    line = line.merge(tickEnter.append("line")
+        .attr("stroke", "currentColor")
+        .attr(x + "2", k * tickSizeInner));
+
+    text = text.merge(tickEnter.append("text")
+        .attr("fill", "currentColor")
+        .attr(x, k * spacing)
+        .attr("dy", orient === top ? "0em" : orient === bottom ? "0.71em" : "0.32em"));
+
+    if (context !== selection) {
+      path = path.transition(context);
+      tick = tick.transition(context);
+      line = line.transition(context);
+      text = text.transition(context);
+
+      tickExit = tickExit.transition(context)
+          .attr("opacity", epsilon)
+          .attr("transform", function(d) { return isFinite(d = position(d)) ? transform(d) : this.getAttribute("transform"); });
+
+      tickEnter
+          .attr("opacity", epsilon)
+          .attr("transform", function(d) { var p = this.parentNode.__axis; return transform(p && isFinite(p = p(d)) ? p : position(d)); });
+    }
+
+    tickExit.remove();
+
+    path
+        .attr("d", orient === left || orient == right
+            ? (tickSizeOuter ? "M" + k * tickSizeOuter + "," + range0 + "H0.5V" + range1 + "H" + k * tickSizeOuter : "M0.5," + range0 + "V" + range1)
+            : (tickSizeOuter ? "M" + range0 + "," + k * tickSizeOuter + "V0.5H" + range1 + "V" + k * tickSizeOuter : "M" + range0 + ",0.5H" + range1));
+
+    tick
+        .attr("opacity", 1)
+        .attr("transform", function(d) { return transform(position(d)); });
+
+    line
+        .attr(x + "2", k * tickSizeInner);
+
+    text
+        .attr(x, k * spacing)
+        .text(format);
+
+    selection.filter(entering)
+        .attr("fill", "none")
+        .attr("font-size", 10)
+        .attr("font-family", "sans-serif")
+        .attr("text-anchor", orient === right ? "start" : orient === left ? "end" : "middle");
+
+    selection
+        .each(function() { this.__axis = position; });
+  }
+
+  axis.scale = function(_) {
+    return arguments.length ? (scale = _, axis) : scale;
+  };
+
+  axis.ticks = function() {
+    return tickArguments = slice.call(arguments), axis;
+  };
+
+  axis.tickArguments = function(_) {
+    return arguments.length ? (tickArguments = _ == null ? [] : slice.call(_), axis) : tickArguments.slice();
+  };
+
+  axis.tickValues = function(_) {
+    return arguments.length ? (tickValues = _ == null ? null : slice.call(_), axis) : tickValues && tickValues.slice();
+  };
+
+  axis.tickFormat = function(_) {
+    return arguments.length ? (tickFormat = _, axis) : tickFormat;
+  };
+
+  axis.tickSize = function(_) {
+    return arguments.length ? (tickSizeInner = tickSizeOuter = +_, axis) : tickSizeInner;
+  };
+
+  axis.tickSizeInner = function(_) {
+    return arguments.length ? (tickSizeInner = +_, axis) : tickSizeInner;
+  };
+
+  axis.tickSizeOuter = function(_) {
+    return arguments.length ? (tickSizeOuter = +_, axis) : tickSizeOuter;
+  };
+
+  axis.tickPadding = function(_) {
+    return arguments.length ? (tickPadding = +_, axis) : tickPadding;
+  };
+
+  return axis;
+}
+
+function axisBottom(scale) {
+  return axis(bottom, scale);
+}
+
+function axisLeft(scale) {
+  return axis(left, scale);
+}
+
 function ascending$1(a, b) {
   return a < b ? -1 : a > b ? 1 : a >= b ? 0 : NaN;
 }
@@ -3051,6 +3221,438 @@ function d3Min(values, valueof) {
   return min;
 }
 
+var pi = Math.PI,
+    tau = 2 * pi,
+    epsilon$1 = 1e-6,
+    tauEpsilon = tau - epsilon$1;
+
+function Path() {
+  this._x0 = this._y0 = // start of current subpath
+  this._x1 = this._y1 = null; // end of current subpath
+  this._ = "";
+}
+
+function path() {
+  return new Path;
+}
+
+Path.prototype = path.prototype = {
+  constructor: Path,
+  moveTo: function(x, y) {
+    this._ += "M" + (this._x0 = this._x1 = +x) + "," + (this._y0 = this._y1 = +y);
+  },
+  closePath: function() {
+    if (this._x1 !== null) {
+      this._x1 = this._x0, this._y1 = this._y0;
+      this._ += "Z";
+    }
+  },
+  lineTo: function(x, y) {
+    this._ += "L" + (this._x1 = +x) + "," + (this._y1 = +y);
+  },
+  quadraticCurveTo: function(x1, y1, x, y) {
+    this._ += "Q" + (+x1) + "," + (+y1) + "," + (this._x1 = +x) + "," + (this._y1 = +y);
+  },
+  bezierCurveTo: function(x1, y1, x2, y2, x, y) {
+    this._ += "C" + (+x1) + "," + (+y1) + "," + (+x2) + "," + (+y2) + "," + (this._x1 = +x) + "," + (this._y1 = +y);
+  },
+  arcTo: function(x1, y1, x2, y2, r) {
+    x1 = +x1, y1 = +y1, x2 = +x2, y2 = +y2, r = +r;
+    var x0 = this._x1,
+        y0 = this._y1,
+        x21 = x2 - x1,
+        y21 = y2 - y1,
+        x01 = x0 - x1,
+        y01 = y0 - y1,
+        l01_2 = x01 * x01 + y01 * y01;
+
+    // Is the radius negative? Error.
+    if (r < 0) throw new Error("negative radius: " + r);
+
+    // Is this path empty? Move to (x1,y1).
+    if (this._x1 === null) {
+      this._ += "M" + (this._x1 = x1) + "," + (this._y1 = y1);
+    }
+
+    // Or, is (x1,y1) coincident with (x0,y0)? Do nothing.
+    else if (!(l01_2 > epsilon$1));
+
+    // Or, are (x0,y0), (x1,y1) and (x2,y2) collinear?
+    // Equivalently, is (x1,y1) coincident with (x2,y2)?
+    // Or, is the radius zero? Line to (x1,y1).
+    else if (!(Math.abs(y01 * x21 - y21 * x01) > epsilon$1) || !r) {
+      this._ += "L" + (this._x1 = x1) + "," + (this._y1 = y1);
+    }
+
+    // Otherwise, draw an arc!
+    else {
+      var x20 = x2 - x0,
+          y20 = y2 - y0,
+          l21_2 = x21 * x21 + y21 * y21,
+          l20_2 = x20 * x20 + y20 * y20,
+          l21 = Math.sqrt(l21_2),
+          l01 = Math.sqrt(l01_2),
+          l = r * Math.tan((pi - Math.acos((l21_2 + l01_2 - l20_2) / (2 * l21 * l01))) / 2),
+          t01 = l / l01,
+          t21 = l / l21;
+
+      // If the start tangent is not coincident with (x0,y0), line to.
+      if (Math.abs(t01 - 1) > epsilon$1) {
+        this._ += "L" + (x1 + t01 * x01) + "," + (y1 + t01 * y01);
+      }
+
+      this._ += "A" + r + "," + r + ",0,0," + (+(y01 * x20 > x01 * y20)) + "," + (this._x1 = x1 + t21 * x21) + "," + (this._y1 = y1 + t21 * y21);
+    }
+  },
+  arc: function(x, y, r, a0, a1, ccw) {
+    x = +x, y = +y, r = +r, ccw = !!ccw;
+    var dx = r * Math.cos(a0),
+        dy = r * Math.sin(a0),
+        x0 = x + dx,
+        y0 = y + dy,
+        cw = 1 ^ ccw,
+        da = ccw ? a0 - a1 : a1 - a0;
+
+    // Is the radius negative? Error.
+    if (r < 0) throw new Error("negative radius: " + r);
+
+    // Is this path empty? Move to (x0,y0).
+    if (this._x1 === null) {
+      this._ += "M" + x0 + "," + y0;
+    }
+
+    // Or, is (x0,y0) not coincident with the previous point? Line to (x0,y0).
+    else if (Math.abs(this._x1 - x0) > epsilon$1 || Math.abs(this._y1 - y0) > epsilon$1) {
+      this._ += "L" + x0 + "," + y0;
+    }
+
+    // Is this arc empty? We’re done.
+    if (!r) return;
+
+    // Does the angle go the wrong way? Flip the direction.
+    if (da < 0) da = da % tau + tau;
+
+    // Is this a complete circle? Draw two arcs to complete the circle.
+    if (da > tauEpsilon) {
+      this._ += "A" + r + "," + r + ",0,1," + cw + "," + (x - dx) + "," + (y - dy) + "A" + r + "," + r + ",0,1," + cw + "," + (this._x1 = x0) + "," + (this._y1 = y0);
+    }
+
+    // Is this arc non-empty? Draw an arc!
+    else if (da > epsilon$1) {
+      this._ += "A" + r + "," + r + ",0," + (+(da >= pi)) + "," + cw + "," + (this._x1 = x + r * Math.cos(a1)) + "," + (this._y1 = y + r * Math.sin(a1));
+    }
+  },
+  rect: function(x, y, w, h) {
+    this._ += "M" + (this._x0 = this._x1 = +x) + "," + (this._y0 = this._y1 = +y) + "h" + (+w) + "v" + (+h) + "h" + (-w) + "Z";
+  },
+  toString: function() {
+    return this._;
+  }
+};
+
+function constant$2(x) {
+  return function constant() {
+    return x;
+  };
+}
+
+var pi$1 = Math.PI;
+var tau$1 = 2 * pi$1;
+
+function Linear(context) {
+  this._context = context;
+}
+
+Linear.prototype = {
+  areaStart: function() {
+    this._line = 0;
+  },
+  areaEnd: function() {
+    this._line = NaN;
+  },
+  lineStart: function() {
+    this._point = 0;
+  },
+  lineEnd: function() {
+    if (this._line || (this._line !== 0 && this._point === 1)) this._context.closePath();
+    this._line = 1 - this._line;
+  },
+  point: function(x, y) {
+    x = +x, y = +y;
+    switch (this._point) {
+      case 0: this._point = 1; this._line ? this._context.lineTo(x, y) : this._context.moveTo(x, y); break;
+      case 1: this._point = 2; // proceed
+      default: this._context.lineTo(x, y); break;
+    }
+  }
+};
+
+function curveLinear(context) {
+  return new Linear(context);
+}
+
+function x(p) {
+  return p[0];
+}
+
+function y(p) {
+  return p[1];
+}
+
+function line() {
+  var x$1 = x,
+      y$1 = y,
+      defined = constant$2(true),
+      context = null,
+      curve = curveLinear,
+      output = null;
+
+  function line(data) {
+    var i,
+        n = data.length,
+        d,
+        defined0 = false,
+        buffer;
+
+    if (context == null) output = curve(buffer = path());
+
+    for (i = 0; i <= n; ++i) {
+      if (!(i < n && defined(d = data[i], i, data)) === defined0) {
+        if (defined0 = !defined0) output.lineStart();
+        else output.lineEnd();
+      }
+      if (defined0) output.point(+x$1(d, i, data), +y$1(d, i, data));
+    }
+
+    if (buffer) return output = null, buffer + "" || null;
+  }
+
+  line.x = function(_) {
+    return arguments.length ? (x$1 = typeof _ === "function" ? _ : constant$2(+_), line) : x$1;
+  };
+
+  line.y = function(_) {
+    return arguments.length ? (y$1 = typeof _ === "function" ? _ : constant$2(+_), line) : y$1;
+  };
+
+  line.defined = function(_) {
+    return arguments.length ? (defined = typeof _ === "function" ? _ : constant$2(!!_), line) : defined;
+  };
+
+  line.curve = function(_) {
+    return arguments.length ? (curve = _, context != null && (output = curve(context)), line) : curve;
+  };
+
+  line.context = function(_) {
+    return arguments.length ? (_ == null ? context = output = null : output = curve(context = _), line) : context;
+  };
+
+  return line;
+}
+
+function d3Area() {
+  var x0 = x,
+      x1 = null,
+      y0 = constant$2(0),
+      y1 = y,
+      defined = constant$2(true),
+      context = null,
+      curve = curveLinear,
+      output = null;
+
+  function area(data) {
+    var i,
+        j,
+        k,
+        n = data.length,
+        d,
+        defined0 = false,
+        buffer,
+        x0z = new Array(n),
+        y0z = new Array(n);
+
+    if (context == null) output = curve(buffer = path());
+
+    for (i = 0; i <= n; ++i) {
+      if (!(i < n && defined(d = data[i], i, data)) === defined0) {
+        if (defined0 = !defined0) {
+          j = i;
+          output.areaStart();
+          output.lineStart();
+        } else {
+          output.lineEnd();
+          output.lineStart();
+          for (k = i - 1; k >= j; --k) {
+            output.point(x0z[k], y0z[k]);
+          }
+          output.lineEnd();
+          output.areaEnd();
+        }
+      }
+      if (defined0) {
+        x0z[i] = +x0(d, i, data), y0z[i] = +y0(d, i, data);
+        output.point(x1 ? +x1(d, i, data) : x0z[i], y1 ? +y1(d, i, data) : y0z[i]);
+      }
+    }
+
+    if (buffer) return output = null, buffer + "" || null;
+  }
+
+  function arealine() {
+    return line().defined(defined).curve(curve).context(context);
+  }
+
+  area.x = function(_) {
+    return arguments.length ? (x0 = typeof _ === "function" ? _ : constant$2(+_), x1 = null, area) : x0;
+  };
+
+  area.x0 = function(_) {
+    return arguments.length ? (x0 = typeof _ === "function" ? _ : constant$2(+_), area) : x0;
+  };
+
+  area.x1 = function(_) {
+    return arguments.length ? (x1 = _ == null ? null : typeof _ === "function" ? _ : constant$2(+_), area) : x1;
+  };
+
+  area.y = function(_) {
+    return arguments.length ? (y0 = typeof _ === "function" ? _ : constant$2(+_), y1 = null, area) : y0;
+  };
+
+  area.y0 = function(_) {
+    return arguments.length ? (y0 = typeof _ === "function" ? _ : constant$2(+_), area) : y0;
+  };
+
+  area.y1 = function(_) {
+    return arguments.length ? (y1 = _ == null ? null : typeof _ === "function" ? _ : constant$2(+_), area) : y1;
+  };
+
+  area.lineX0 =
+  area.lineY0 = function() {
+    return arealine().x(x0).y(y0);
+  };
+
+  area.lineY1 = function() {
+    return arealine().x(x0).y(y1);
+  };
+
+  area.lineX1 = function() {
+    return arealine().x(x1).y(y0);
+  };
+
+  area.defined = function(_) {
+    return arguments.length ? (defined = typeof _ === "function" ? _ : constant$2(!!_), area) : defined;
+  };
+
+  area.curve = function(_) {
+    return arguments.length ? (curve = _, context != null && (output = curve(context)), area) : curve;
+  };
+
+  area.context = function(_) {
+    return arguments.length ? (_ == null ? context = output = null : output = curve(context = _), area) : context;
+  };
+
+  return area;
+}
+
+var circle = {
+  draw: function(context, size) {
+    var r = Math.sqrt(size / pi$1);
+    context.moveTo(r, 0);
+    context.arc(0, 0, r, 0, tau$1);
+  }
+};
+
+var sqrt3 = Math.sqrt(3);
+
+var symbolTriangle = {
+  draw: function(context, size) {
+    var y = -Math.sqrt(size / (sqrt3 * 3));
+    context.moveTo(0, y * 2);
+    context.lineTo(-sqrt3 * y, -y);
+    context.lineTo(sqrt3 * y, -y);
+    context.closePath();
+  }
+};
+
+function symbol() {
+  var type = constant$2(circle),
+      size = constant$2(64),
+      context = null;
+
+  function symbol() {
+    var buffer;
+    if (!context) context = buffer = path();
+    type.apply(this, arguments).draw(context, +size.apply(this, arguments));
+    if (buffer) return context = null, buffer + "" || null;
+  }
+
+  symbol.type = function(_) {
+    return arguments.length ? (type = typeof _ === "function" ? _ : constant$2(_), symbol) : type;
+  };
+
+  symbol.size = function(_) {
+    return arguments.length ? (size = typeof _ === "function" ? _ : constant$2(+_), symbol) : size;
+  };
+
+  symbol.context = function(_) {
+    return arguments.length ? (context = _ == null ? null : _, symbol) : context;
+  };
+
+  return symbol;
+}
+
+function point$1(that, x, y) {
+  that._context.bezierCurveTo(
+    (2 * that._x0 + that._x1) / 3,
+    (2 * that._y0 + that._y1) / 3,
+    (that._x0 + 2 * that._x1) / 3,
+    (that._y0 + 2 * that._y1) / 3,
+    (that._x0 + 4 * that._x1 + x) / 6,
+    (that._y0 + 4 * that._y1 + y) / 6
+  );
+}
+
+function Basis(context) {
+  this._context = context;
+}
+
+Basis.prototype = {
+  areaStart: function() {
+    this._line = 0;
+  },
+  areaEnd: function() {
+    this._line = NaN;
+  },
+  lineStart: function() {
+    this._x0 = this._x1 =
+    this._y0 = this._y1 = NaN;
+    this._point = 0;
+  },
+  lineEnd: function() {
+    switch (this._point) {
+      case 3: point$1(this, this._x1, this._y1); // proceed
+      case 2: this._context.lineTo(this._x1, this._y1); break;
+    }
+    if (this._line || (this._line !== 0 && this._point === 1)) this._context.closePath();
+    this._line = 1 - this._line;
+  },
+  point: function(x, y) {
+    x = +x, y = +y;
+    switch (this._point) {
+      case 0: this._point = 1; this._line ? this._context.lineTo(x, y) : this._context.moveTo(x, y); break;
+      case 1: this._point = 2; break;
+      case 2: this._point = 3; this._context.lineTo((5 * this._x0 + this._x1) / 6, (5 * this._y0 + this._y1) / 6); // proceed
+      default: point$1(this, x, y); break;
+    }
+    this._x0 = this._x1, this._x1 = x;
+    this._y0 = this._y1, this._y1 = y;
+  }
+};
+
+function curveBasis(context) {
+  return new Basis(context);
+}
+
 function initRange(domain, range) {
   switch (arguments.length) {
     case 0: break;
@@ -3173,7 +3775,7 @@ function set$2(object, f) {
 var array = Array.prototype;
 
 var map$1 = array.map;
-var slice = array.slice;
+var slice$1 = array.slice;
 
 var implicit = {name: "implicit"};
 
@@ -3201,7 +3803,7 @@ function ordinal() {
   };
 
   scale.range = function(_) {
-    return arguments.length ? (range = slice.call(_), scale) : range.slice();
+    return arguments.length ? (range = slice$1.call(_), scale) : range.slice();
   };
 
   scale.unknown = function(_) {
@@ -3217,26 +3819,26 @@ function ordinal() {
   return scale;
 }
 
-function constant$2(x) {
+function constant$3(x) {
   return function() {
     return x;
   };
 }
 
-function number(x) {
+function number$1(x) {
   return +x;
 }
 
 var unit = [0, 1];
 
-function identity$1(x) {
+function identity$2(x) {
   return x;
 }
 
 function normalize(a, b) {
   return (b -= (a = +a))
       ? function(x) { return (x - a) / b; }
-      : constant$2(isNaN(b) ? NaN : 0.5);
+      : constant$3(isNaN(b) ? NaN : 0.5);
 }
 
 function clamper(domain) {
@@ -3293,7 +3895,7 @@ function transformer() {
       transform,
       untransform,
       unknown,
-      clamp = identity$1,
+      clamp = identity$2,
       piecewise,
       output,
       input;
@@ -3313,19 +3915,19 @@ function transformer() {
   };
 
   scale.domain = function(_) {
-    return arguments.length ? (domain = map$1.call(_, number), clamp === identity$1 || (clamp = clamper(domain)), rescale()) : domain.slice();
+    return arguments.length ? (domain = map$1.call(_, number$1), clamp === identity$2 || (clamp = clamper(domain)), rescale()) : domain.slice();
   };
 
   scale.range = function(_) {
-    return arguments.length ? (range = slice.call(_), rescale()) : range.slice();
+    return arguments.length ? (range = slice$1.call(_), rescale()) : range.slice();
   };
 
   scale.rangeRound = function(_) {
-    return range = slice.call(_), interpolate = interpolateRound, rescale();
+    return range = slice$1.call(_), interpolate = interpolateRound, rescale();
   };
 
   scale.clamp = function(_) {
-    return arguments.length ? (clamp = _ ? clamper(domain) : identity$1, scale) : clamp !== identity$1;
+    return arguments.length ? (clamp = _ ? clamper(domain) : identity$2, scale) : clamp !== identity$2;
   };
 
   scale.interpolate = function(_) {
@@ -3493,7 +4095,7 @@ var formatTypes = {
   "x": function(x) { return Math.round(x).toString(16); }
 };
 
-function identity$2(x) {
+function identity$3(x) {
   return x;
 }
 
@@ -3501,11 +4103,11 @@ var map$2 = Array.prototype.map,
     prefixes = ["y","z","a","f","p","n","µ","m","","k","M","G","T","P","E","Z","Y"];
 
 function formatLocale(locale) {
-  var group = locale.grouping === undefined || locale.thousands === undefined ? identity$2 : formatGroup(map$2.call(locale.grouping, Number), locale.thousands + ""),
+  var group = locale.grouping === undefined || locale.thousands === undefined ? identity$3 : formatGroup(map$2.call(locale.grouping, Number), locale.thousands + ""),
       currencyPrefix = locale.currency === undefined ? "" : locale.currency[0] + "",
       currencySuffix = locale.currency === undefined ? "" : locale.currency[1] + "",
       decimal = locale.decimal === undefined ? "." : locale.decimal + "",
-      numerals = locale.numerals === undefined ? identity$2 : formatNumerals(map$2.call(locale.numerals, String)),
+      numerals = locale.numerals === undefined ? identity$3 : formatNumerals(map$2.call(locale.numerals, String)),
       percent = locale.percent === undefined ? "%" : locale.percent + "",
       minus = locale.minus === undefined ? "-" : locale.minus + "",
       nan = locale.nan === undefined ? "NaN" : locale.nan + "";
@@ -3753,7 +4355,7 @@ function linearish(scale) {
 }
 
 function linear$1() {
-  var scale = continuous(identity$1, identity$1);
+  var scale = continuous(identity$2, identity$2);
 
   scale.copy = function() {
     return copy(scale, linear$1());
@@ -3763,6 +4365,24 @@ function linear$1() {
 
   return linearish(scale);
 }
+
+function colors(specifier) {
+  var n = specifier.length / 6 | 0, colors = new Array(n), i = 0;
+  while (i < n) colors[i] = "#" + specifier.slice(i * 6, ++i * 6);
+  return colors;
+}
+
+var schemeCategory10 = colors("1f77b4ff7f0e2ca02cd627289467bd8c564be377c27f7f7fbcbd2217becf");
+
+var schemeAccent = colors("7fc97fbeaed4fdc086ffff99386cb0f0027fbf5b17666666");
+
+var schemeDark2 = colors("1b9e77d95f027570b3e7298a66a61ee6ab02a6761d666666");
+
+var schemePaired = colors("a6cee31f78b4b2df8a33a02cfb9a99e31a1cfdbf6fff7f00cab2d66a3d9affff99b15928");
+
+var schemeSet2 = colors("66c2a5fc8d628da0cbe78ac3a6d854ffd92fe5c494b3b3b3");
+
+var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9bc80bdccebc5ffed6f");
 
 function nopropagation() {
   event$1.stopImmediatePropagation();
@@ -3799,7 +4419,7 @@ function yesdrag(view, noclick) {
   }
 }
 
-function constant$3(x) {
+function constant$4(x) {
   return function() {
     return x;
   };
@@ -3957,19 +4577,19 @@ function drag() {
   }
 
   drag.filter = function(_) {
-    return arguments.length ? (filter = typeof _ === "function" ? _ : constant$3(!!_), drag) : filter;
+    return arguments.length ? (filter = typeof _ === "function" ? _ : constant$4(!!_), drag) : filter;
   };
 
   drag.container = function(_) {
-    return arguments.length ? (container = typeof _ === "function" ? _ : constant$3(_), drag) : container;
+    return arguments.length ? (container = typeof _ === "function" ? _ : constant$4(_), drag) : container;
   };
 
   drag.subject = function(_) {
-    return arguments.length ? (subject = typeof _ === "function" ? _ : constant$3(_), drag) : subject;
+    return arguments.length ? (subject = typeof _ === "function" ? _ : constant$4(_), drag) : subject;
   };
 
   drag.touchable = function(_) {
-    return arguments.length ? (touchable = typeof _ === "function" ? _ : constant$3(!!_), drag) : touchable;
+    return arguments.length ? (touchable = typeof _ === "function" ? _ : constant$4(!!_), drag) : touchable;
   };
 
   drag.on = function() {
@@ -3984,640 +4604,20 @@ function drag() {
   return drag;
 }
 
-var slice$1 = Array.prototype.slice;
-
-function identity$3(x) {
-  return x;
-}
-
-var top = 1,
-    right = 2,
-    bottom = 3,
-    left = 4,
-    epsilon = 1e-6;
-
-function translateX(x) {
-  return "translate(" + (x + 0.5) + ",0)";
-}
-
-function translateY(y) {
-  return "translate(0," + (y + 0.5) + ")";
-}
-
-function number$1(scale) {
-  return function(d) {
-    return +scale(d);
-  };
-}
-
-function center(scale) {
-  var offset = Math.max(0, scale.bandwidth() - 1) / 2; // Adjust for 0.5px offset.
-  if (scale.round()) offset = Math.round(offset);
-  return function(d) {
-    return +scale(d) + offset;
-  };
-}
-
-function entering() {
-  return !this.__axis;
-}
-
-function axis(orient, scale) {
-  var tickArguments = [],
-      tickValues = null,
-      tickFormat = null,
-      tickSizeInner = 6,
-      tickSizeOuter = 6,
-      tickPadding = 3,
-      k = orient === top || orient === left ? -1 : 1,
-      x = orient === left || orient === right ? "x" : "y",
-      transform = orient === top || orient === bottom ? translateX : translateY;
-
-  function axis(context) {
-    var values = tickValues == null ? (scale.ticks ? scale.ticks.apply(scale, tickArguments) : scale.domain()) : tickValues,
-        format = tickFormat == null ? (scale.tickFormat ? scale.tickFormat.apply(scale, tickArguments) : identity$3) : tickFormat,
-        spacing = Math.max(tickSizeInner, 0) + tickPadding,
-        range = scale.range(),
-        range0 = +range[0] + 0.5,
-        range1 = +range[range.length - 1] + 0.5,
-        position = (scale.bandwidth ? center : number$1)(scale.copy()),
-        selection = context.selection ? context.selection() : context,
-        path = selection.selectAll(".domain").data([null]),
-        tick = selection.selectAll(".tick").data(values, scale).order(),
-        tickExit = tick.exit(),
-        tickEnter = tick.enter().append("g").attr("class", "tick"),
-        line = tick.select("line"),
-        text = tick.select("text");
-
-    path = path.merge(path.enter().insert("path", ".tick")
-        .attr("class", "domain")
-        .attr("stroke", "currentColor"));
-
-    tick = tick.merge(tickEnter);
-
-    line = line.merge(tickEnter.append("line")
-        .attr("stroke", "currentColor")
-        .attr(x + "2", k * tickSizeInner));
-
-    text = text.merge(tickEnter.append("text")
-        .attr("fill", "currentColor")
-        .attr(x, k * spacing)
-        .attr("dy", orient === top ? "0em" : orient === bottom ? "0.71em" : "0.32em"));
-
-    if (context !== selection) {
-      path = path.transition(context);
-      tick = tick.transition(context);
-      line = line.transition(context);
-      text = text.transition(context);
-
-      tickExit = tickExit.transition(context)
-          .attr("opacity", epsilon)
-          .attr("transform", function(d) { return isFinite(d = position(d)) ? transform(d) : this.getAttribute("transform"); });
-
-      tickEnter
-          .attr("opacity", epsilon)
-          .attr("transform", function(d) { var p = this.parentNode.__axis; return transform(p && isFinite(p = p(d)) ? p : position(d)); });
-    }
-
-    tickExit.remove();
-
-    path
-        .attr("d", orient === left || orient == right
-            ? (tickSizeOuter ? "M" + k * tickSizeOuter + "," + range0 + "H0.5V" + range1 + "H" + k * tickSizeOuter : "M0.5," + range0 + "V" + range1)
-            : (tickSizeOuter ? "M" + range0 + "," + k * tickSizeOuter + "V0.5H" + range1 + "V" + k * tickSizeOuter : "M" + range0 + ",0.5H" + range1));
-
-    tick
-        .attr("opacity", 1)
-        .attr("transform", function(d) { return transform(position(d)); });
-
-    line
-        .attr(x + "2", k * tickSizeInner);
-
-    text
-        .attr(x, k * spacing)
-        .text(format);
-
-    selection.filter(entering)
-        .attr("fill", "none")
-        .attr("font-size", 10)
-        .attr("font-family", "sans-serif")
-        .attr("text-anchor", orient === right ? "start" : orient === left ? "end" : "middle");
-
-    selection
-        .each(function() { this.__axis = position; });
-  }
-
-  axis.scale = function(_) {
-    return arguments.length ? (scale = _, axis) : scale;
-  };
-
-  axis.ticks = function() {
-    return tickArguments = slice$1.call(arguments), axis;
-  };
-
-  axis.tickArguments = function(_) {
-    return arguments.length ? (tickArguments = _ == null ? [] : slice$1.call(_), axis) : tickArguments.slice();
-  };
-
-  axis.tickValues = function(_) {
-    return arguments.length ? (tickValues = _ == null ? null : slice$1.call(_), axis) : tickValues && tickValues.slice();
-  };
-
-  axis.tickFormat = function(_) {
-    return arguments.length ? (tickFormat = _, axis) : tickFormat;
-  };
-
-  axis.tickSize = function(_) {
-    return arguments.length ? (tickSizeInner = tickSizeOuter = +_, axis) : tickSizeInner;
-  };
-
-  axis.tickSizeInner = function(_) {
-    return arguments.length ? (tickSizeInner = +_, axis) : tickSizeInner;
-  };
-
-  axis.tickSizeOuter = function(_) {
-    return arguments.length ? (tickSizeOuter = +_, axis) : tickSizeOuter;
-  };
-
-  axis.tickPadding = function(_) {
-    return arguments.length ? (tickPadding = +_, axis) : tickPadding;
-  };
-
-  return axis;
-}
-
-function axisBottom(scale) {
-  return axis(bottom, scale);
-}
-
-function axisLeft(scale) {
-  return axis(left, scale);
-}
-
-var pi = Math.PI,
-    tau = 2 * pi,
-    epsilon$1 = 1e-6,
-    tauEpsilon = tau - epsilon$1;
-
-function Path() {
-  this._x0 = this._y0 = // start of current subpath
-  this._x1 = this._y1 = null; // end of current subpath
-  this._ = "";
-}
-
-function path() {
-  return new Path;
-}
-
-Path.prototype = path.prototype = {
-  constructor: Path,
-  moveTo: function(x, y) {
-    this._ += "M" + (this._x0 = this._x1 = +x) + "," + (this._y0 = this._y1 = +y);
-  },
-  closePath: function() {
-    if (this._x1 !== null) {
-      this._x1 = this._x0, this._y1 = this._y0;
-      this._ += "Z";
-    }
-  },
-  lineTo: function(x, y) {
-    this._ += "L" + (this._x1 = +x) + "," + (this._y1 = +y);
-  },
-  quadraticCurveTo: function(x1, y1, x, y) {
-    this._ += "Q" + (+x1) + "," + (+y1) + "," + (this._x1 = +x) + "," + (this._y1 = +y);
-  },
-  bezierCurveTo: function(x1, y1, x2, y2, x, y) {
-    this._ += "C" + (+x1) + "," + (+y1) + "," + (+x2) + "," + (+y2) + "," + (this._x1 = +x) + "," + (this._y1 = +y);
-  },
-  arcTo: function(x1, y1, x2, y2, r) {
-    x1 = +x1, y1 = +y1, x2 = +x2, y2 = +y2, r = +r;
-    var x0 = this._x1,
-        y0 = this._y1,
-        x21 = x2 - x1,
-        y21 = y2 - y1,
-        x01 = x0 - x1,
-        y01 = y0 - y1,
-        l01_2 = x01 * x01 + y01 * y01;
-
-    // Is the radius negative? Error.
-    if (r < 0) throw new Error("negative radius: " + r);
-
-    // Is this path empty? Move to (x1,y1).
-    if (this._x1 === null) {
-      this._ += "M" + (this._x1 = x1) + "," + (this._y1 = y1);
-    }
-
-    // Or, is (x1,y1) coincident with (x0,y0)? Do nothing.
-    else if (!(l01_2 > epsilon$1));
-
-    // Or, are (x0,y0), (x1,y1) and (x2,y2) collinear?
-    // Equivalently, is (x1,y1) coincident with (x2,y2)?
-    // Or, is the radius zero? Line to (x1,y1).
-    else if (!(Math.abs(y01 * x21 - y21 * x01) > epsilon$1) || !r) {
-      this._ += "L" + (this._x1 = x1) + "," + (this._y1 = y1);
-    }
-
-    // Otherwise, draw an arc!
-    else {
-      var x20 = x2 - x0,
-          y20 = y2 - y0,
-          l21_2 = x21 * x21 + y21 * y21,
-          l20_2 = x20 * x20 + y20 * y20,
-          l21 = Math.sqrt(l21_2),
-          l01 = Math.sqrt(l01_2),
-          l = r * Math.tan((pi - Math.acos((l21_2 + l01_2 - l20_2) / (2 * l21 * l01))) / 2),
-          t01 = l / l01,
-          t21 = l / l21;
-
-      // If the start tangent is not coincident with (x0,y0), line to.
-      if (Math.abs(t01 - 1) > epsilon$1) {
-        this._ += "L" + (x1 + t01 * x01) + "," + (y1 + t01 * y01);
-      }
-
-      this._ += "A" + r + "," + r + ",0,0," + (+(y01 * x20 > x01 * y20)) + "," + (this._x1 = x1 + t21 * x21) + "," + (this._y1 = y1 + t21 * y21);
-    }
-  },
-  arc: function(x, y, r, a0, a1, ccw) {
-    x = +x, y = +y, r = +r, ccw = !!ccw;
-    var dx = r * Math.cos(a0),
-        dy = r * Math.sin(a0),
-        x0 = x + dx,
-        y0 = y + dy,
-        cw = 1 ^ ccw,
-        da = ccw ? a0 - a1 : a1 - a0;
-
-    // Is the radius negative? Error.
-    if (r < 0) throw new Error("negative radius: " + r);
-
-    // Is this path empty? Move to (x0,y0).
-    if (this._x1 === null) {
-      this._ += "M" + x0 + "," + y0;
-    }
-
-    // Or, is (x0,y0) not coincident with the previous point? Line to (x0,y0).
-    else if (Math.abs(this._x1 - x0) > epsilon$1 || Math.abs(this._y1 - y0) > epsilon$1) {
-      this._ += "L" + x0 + "," + y0;
-    }
-
-    // Is this arc empty? We’re done.
-    if (!r) return;
-
-    // Does the angle go the wrong way? Flip the direction.
-    if (da < 0) da = da % tau + tau;
-
-    // Is this a complete circle? Draw two arcs to complete the circle.
-    if (da > tauEpsilon) {
-      this._ += "A" + r + "," + r + ",0,1," + cw + "," + (x - dx) + "," + (y - dy) + "A" + r + "," + r + ",0,1," + cw + "," + (this._x1 = x0) + "," + (this._y1 = y0);
-    }
-
-    // Is this arc non-empty? Draw an arc!
-    else if (da > epsilon$1) {
-      this._ += "A" + r + "," + r + ",0," + (+(da >= pi)) + "," + cw + "," + (this._x1 = x + r * Math.cos(a1)) + "," + (this._y1 = y + r * Math.sin(a1));
-    }
-  },
-  rect: function(x, y, w, h) {
-    this._ += "M" + (this._x0 = this._x1 = +x) + "," + (this._y0 = this._y1 = +y) + "h" + (+w) + "v" + (+h) + "h" + (-w) + "Z";
-  },
-  toString: function() {
-    return this._;
-  }
-};
-
-function constant$4(x) {
-  return function constant() {
-    return x;
-  };
-}
-
-var pi$1 = Math.PI;
-var tau$1 = 2 * pi$1;
-
-function Linear(context) {
-  this._context = context;
-}
-
-Linear.prototype = {
-  areaStart: function() {
-    this._line = 0;
-  },
-  areaEnd: function() {
-    this._line = NaN;
-  },
-  lineStart: function() {
-    this._point = 0;
-  },
-  lineEnd: function() {
-    if (this._line || (this._line !== 0 && this._point === 1)) this._context.closePath();
-    this._line = 1 - this._line;
-  },
-  point: function(x, y) {
-    x = +x, y = +y;
-    switch (this._point) {
-      case 0: this._point = 1; this._line ? this._context.lineTo(x, y) : this._context.moveTo(x, y); break;
-      case 1: this._point = 2; // proceed
-      default: this._context.lineTo(x, y); break;
-    }
-  }
-};
-
-function curveLinear(context) {
-  return new Linear(context);
-}
-
-function x(p) {
-  return p[0];
-}
-
-function y(p) {
-  return p[1];
-}
-
-function line() {
-  var x$1 = x,
-      y$1 = y,
-      defined = constant$4(true),
-      context = null,
-      curve = curveLinear,
-      output = null;
-
-  function line(data) {
-    var i,
-        n = data.length,
-        d,
-        defined0 = false,
-        buffer;
-
-    if (context == null) output = curve(buffer = path());
-
-    for (i = 0; i <= n; ++i) {
-      if (!(i < n && defined(d = data[i], i, data)) === defined0) {
-        if (defined0 = !defined0) output.lineStart();
-        else output.lineEnd();
-      }
-      if (defined0) output.point(+x$1(d, i, data), +y$1(d, i, data));
-    }
-
-    if (buffer) return output = null, buffer + "" || null;
-  }
-
-  line.x = function(_) {
-    return arguments.length ? (x$1 = typeof _ === "function" ? _ : constant$4(+_), line) : x$1;
-  };
-
-  line.y = function(_) {
-    return arguments.length ? (y$1 = typeof _ === "function" ? _ : constant$4(+_), line) : y$1;
-  };
-
-  line.defined = function(_) {
-    return arguments.length ? (defined = typeof _ === "function" ? _ : constant$4(!!_), line) : defined;
-  };
-
-  line.curve = function(_) {
-    return arguments.length ? (curve = _, context != null && (output = curve(context)), line) : curve;
-  };
-
-  line.context = function(_) {
-    return arguments.length ? (_ == null ? context = output = null : output = curve(context = _), line) : context;
-  };
-
-  return line;
-}
-
-function d3Area() {
-  var x0 = x,
-      x1 = null,
-      y0 = constant$4(0),
-      y1 = y,
-      defined = constant$4(true),
-      context = null,
-      curve = curveLinear,
-      output = null;
-
-  function area(data) {
-    var i,
-        j,
-        k,
-        n = data.length,
-        d,
-        defined0 = false,
-        buffer,
-        x0z = new Array(n),
-        y0z = new Array(n);
-
-    if (context == null) output = curve(buffer = path());
-
-    for (i = 0; i <= n; ++i) {
-      if (!(i < n && defined(d = data[i], i, data)) === defined0) {
-        if (defined0 = !defined0) {
-          j = i;
-          output.areaStart();
-          output.lineStart();
-        } else {
-          output.lineEnd();
-          output.lineStart();
-          for (k = i - 1; k >= j; --k) {
-            output.point(x0z[k], y0z[k]);
-          }
-          output.lineEnd();
-          output.areaEnd();
-        }
-      }
-      if (defined0) {
-        x0z[i] = +x0(d, i, data), y0z[i] = +y0(d, i, data);
-        output.point(x1 ? +x1(d, i, data) : x0z[i], y1 ? +y1(d, i, data) : y0z[i]);
-      }
-    }
-
-    if (buffer) return output = null, buffer + "" || null;
-  }
-
-  function arealine() {
-    return line().defined(defined).curve(curve).context(context);
-  }
-
-  area.x = function(_) {
-    return arguments.length ? (x0 = typeof _ === "function" ? _ : constant$4(+_), x1 = null, area) : x0;
-  };
-
-  area.x0 = function(_) {
-    return arguments.length ? (x0 = typeof _ === "function" ? _ : constant$4(+_), area) : x0;
-  };
-
-  area.x1 = function(_) {
-    return arguments.length ? (x1 = _ == null ? null : typeof _ === "function" ? _ : constant$4(+_), area) : x1;
-  };
-
-  area.y = function(_) {
-    return arguments.length ? (y0 = typeof _ === "function" ? _ : constant$4(+_), y1 = null, area) : y0;
-  };
-
-  area.y0 = function(_) {
-    return arguments.length ? (y0 = typeof _ === "function" ? _ : constant$4(+_), area) : y0;
-  };
-
-  area.y1 = function(_) {
-    return arguments.length ? (y1 = _ == null ? null : typeof _ === "function" ? _ : constant$4(+_), area) : y1;
-  };
-
-  area.lineX0 =
-  area.lineY0 = function() {
-    return arealine().x(x0).y(y0);
-  };
-
-  area.lineY1 = function() {
-    return arealine().x(x0).y(y1);
-  };
-
-  area.lineX1 = function() {
-    return arealine().x(x1).y(y0);
-  };
-
-  area.defined = function(_) {
-    return arguments.length ? (defined = typeof _ === "function" ? _ : constant$4(!!_), area) : defined;
-  };
-
-  area.curve = function(_) {
-    return arguments.length ? (curve = _, context != null && (output = curve(context)), area) : curve;
-  };
-
-  area.context = function(_) {
-    return arguments.length ? (_ == null ? context = output = null : output = curve(context = _), area) : context;
-  };
-
-  return area;
-}
-
-var circle = {
-  draw: function(context, size) {
-    var r = Math.sqrt(size / pi$1);
-    context.moveTo(r, 0);
-    context.arc(0, 0, r, 0, tau$1);
-  }
-};
-
-var sqrt3 = Math.sqrt(3);
-
-var symbolTriangle = {
-  draw: function(context, size) {
-    var y = -Math.sqrt(size / (sqrt3 * 3));
-    context.moveTo(0, y * 2);
-    context.lineTo(-sqrt3 * y, -y);
-    context.lineTo(sqrt3 * y, -y);
-    context.closePath();
-  }
-};
-
-function symbol() {
-  var type = constant$4(circle),
-      size = constant$4(64),
-      context = null;
-
-  function symbol() {
-    var buffer;
-    if (!context) context = buffer = path();
-    type.apply(this, arguments).draw(context, +size.apply(this, arguments));
-    if (buffer) return context = null, buffer + "" || null;
-  }
-
-  symbol.type = function(_) {
-    return arguments.length ? (type = typeof _ === "function" ? _ : constant$4(_), symbol) : type;
-  };
-
-  symbol.size = function(_) {
-    return arguments.length ? (size = typeof _ === "function" ? _ : constant$4(+_), symbol) : size;
-  };
-
-  symbol.context = function(_) {
-    return arguments.length ? (context = _ == null ? null : _, symbol) : context;
-  };
-
-  return symbol;
-}
-
-function point$1(that, x, y) {
-  that._context.bezierCurveTo(
-    (2 * that._x0 + that._x1) / 3,
-    (2 * that._y0 + that._y1) / 3,
-    (that._x0 + 2 * that._x1) / 3,
-    (that._y0 + 2 * that._y1) / 3,
-    (that._x0 + 4 * that._x1 + x) / 6,
-    (that._y0 + 4 * that._y1 + y) / 6
-  );
-}
-
-function Basis(context) {
-  this._context = context;
-}
-
-Basis.prototype = {
-  areaStart: function() {
-    this._line = 0;
-  },
-  areaEnd: function() {
-    this._line = NaN;
-  },
-  lineStart: function() {
-    this._x0 = this._x1 =
-    this._y0 = this._y1 = NaN;
-    this._point = 0;
-  },
-  lineEnd: function() {
-    switch (this._point) {
-      case 3: point$1(this, this._x1, this._y1); // proceed
-      case 2: this._context.lineTo(this._x1, this._y1); break;
-    }
-    if (this._line || (this._line !== 0 && this._point === 1)) this._context.closePath();
-    this._line = 1 - this._line;
-  },
-  point: function(x, y) {
-    x = +x, y = +y;
-    switch (this._point) {
-      case 0: this._point = 1; this._line ? this._context.lineTo(x, y) : this._context.moveTo(x, y); break;
-      case 1: this._point = 2; break;
-      case 2: this._point = 3; this._context.lineTo((5 * this._x0 + this._x1) / 6, (5 * this._y0 + this._y1) / 6); // proceed
-      default: point$1(this, x, y); break;
-    }
-    this._x0 = this._x1, this._x1 = x;
-    this._y0 = this._y1, this._y1 = y;
-  }
-};
-
-function curveBasis(context) {
-  return new Basis(context);
-}
-
-function colors(specifier) {
-  var n = specifier.length / 6 | 0, colors = new Array(n), i = 0;
-  while (i < n) colors[i] = "#" + specifier.slice(i * 6, ++i * 6);
-  return colors;
-}
-
-var schemeCategory10 = colors("1f77b4ff7f0e2ca02cd627289467bd8c564be377c27f7f7fbcbd2217becf");
-
-var schemeAccent = colors("7fc97fbeaed4fdc086ffff99386cb0f0027fbf5b17666666");
-
-var schemeDark2 = colors("1b9e77d95f027570b3e7298a66a61ee6ab02a6761d666666");
-
-var schemePaired = colors("a6cee31f78b4b2df8a33a02cfb9a99e31a1cfdbf6fff7f00cab2d66a3d9affff99b15928");
-
-var schemeSet2 = colors("66c2a5fc8d628da0cbe78ac3a6d854ffd92fe5c494b3b3b3");
-
-var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9bc80bdccebc5ffed6f");
-
 (function (factory, window) {
   // define an AMD module that relies on 'leaflet'
-  if (typeof define === 'function' && define.amd) {
-    define(['leaflet'], factory); // define a Common JS module that relies on 'leaflet'
-  } else if ((typeof exports === "undefined" ? "undefined" : _typeof(exports)) === 'object') {
-    if (typeof window !== 'undefined' && window.L) {
+  if (typeof define === "function" && define.amd) {
+    define(["leaflet"], factory); // define a Common JS module that relies on 'leaflet'
+  } else if ((typeof exports === "undefined" ? "undefined" : _typeof(exports)) === "object") {
+    if (typeof window !== "undefined" && window.L) {
       module.exports = factory(L);
     } else {
-      module.exports = factory(require('leaflet'));
+      module.exports = factory(require("leaflet"));
     }
   } // attach your plugin to the global 'L' variable
 
 
-  if (typeof window !== 'undefined' && window.L) {
+  if (typeof window !== "undefined" && window.L) {
     window.L.Control.Heightgraph = factory(L);
   }
 })(function (L) {
@@ -4659,7 +4659,7 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
       this._svgWidth = this._width - this._margin.left - this._margin.right;
       this._svgHeight = this._height - this._margin.top - this._margin.bottom;
       this._highlightStyle = this.options.highlightStyle || {
-        color: 'red'
+        color: "red"
       };
       this._graphStyle = this.options.graphStyle || {};
       this._dragCache = {};
@@ -4669,7 +4669,7 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
       L.DomEvent.disableClickPropagation(container);
 
       if (this.options.expandControls) {
-        var buttonContainer = this._button = L.DomUtil.create('div', "heightgraph-toggle", container);
+        var buttonContainer = this._button = L.DomUtil.create("div", "heightgraph-toggle", container);
         var link = L.DomUtil.create("a", "heightgraph-toggle-icon", buttonContainer);
         var closeButton = this._closeButton = L.DomUtil.create("a", "heightgraph-close-icon", container);
       }
@@ -4701,13 +4701,13 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
     },
 
     /**
-    * Internal function. Overloads public addData().
-    * Call with resize = true when resizing instead of actually adding data.
-    * TODO: this should be refactored to avoid calling addData on resize
-    * @param data
-    * @param resize
-    * @private
-    */
+     * Internal function. Overloads public addData().
+     * Call with resize = true when resizing instead of actually adding data.
+     * TODO: this should be refactored to avoid calling addData on resize
+     * @param data
+     * @param resize
+     * @private
+     */
     _addData: function _addData(data) {
       if (this._svg !== undefined) {
         this._svg.selectAll("*").remove();
@@ -4751,17 +4751,17 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
       if (!L.Browser.touch) {
         L.DomEvent.disableClickPropagation(this._container);
       } else {
-        L.DomEvent.on(this._container, 'click', L.DomEvent.stopPropagation);
+        L.DomEvent.on(this._container, "click", L.DomEvent.stopPropagation);
       }
 
       if (this.options.expandControls) {
-        L.DomEvent.on(this._button, 'click', this._expand, this);
-        L.DomEvent.on(this._closeButton, 'click', this._expand, this);
+        L.DomEvent.on(this._button, "click", this._expand, this);
+        L.DomEvent.on(this._closeButton, "click", this._expand, this);
       }
     },
     _dragHandler: function _dragHandler() {
       //we don´t want map events to occur here
-      if (typeof event !== 'undefined') {
+      if (typeof event !== "undefined") {
         event.preventDefault();
         event.stopPropagation();
       }
@@ -4786,7 +4786,7 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
       if (!this._dragRectangle && !this._dragRectangleG) {
         var g = select(this._container).select("svg").select("g");
         this._dragRectangleG = g.append("g");
-        this._dragRectangle = this._dragRectangleG.append("rect").attr("width", x2 - x1).attr("height", this._svgHeight).attr("x", x1).attr('class', 'mouse-drag').style("fill", "grey").style("opacity", 0.5).style("pointer-events", "none");
+        this._dragRectangle = this._dragRectangleG.append("rect").attr("width", x2 - x1).attr("height", this._svgHeight).attr("x", x1).attr("class", "mouse-drag").style("fill", "grey").style("opacity", 0.5).style("pointer-events", "none");
       } else {
         this._dragRectangle.attr("width", x2 - x1).attr("x", x1);
       }
@@ -4886,11 +4886,11 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
 
       if (!this._showState) {
         select(this._button).style("display", "none");
-        select(this._container).selectAll('svg').style("display", "block");
+        select(this._container).selectAll("svg").style("display", "block");
         select(this._closeButton).style("display", "block");
       } else {
         select(this._button).style("display", "block");
-        select(this._container).selectAll('svg').style("display", "none");
+        select(this._container).selectAll("svg").style("display", "none");
         select(this._closeButton).style("display", "none");
       }
 
@@ -4933,8 +4933,8 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
     _d3ColorCategorical: [schemeAccent, schemeDark2, schemeSet2, schemeCategory10, schemeSet3, schemePaired],
 
     /**
-    * Prepares the data needed for the height graph
-    */
+     * Prepares the data needed for the height graph
+     */
     _prepareData: function _prepareData() {
       this._coordinates = [];
       this._elevations = [];
@@ -4967,7 +4967,7 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
         var i = void 0,
             cnt = 0;
         var usedColors = {};
-        var isMappingFunction = this._mappings !== undefined && typeof this._mappings[data[y].properties.summary] === 'function';
+        var isMappingFunction = this._mappings !== undefined && typeof this._mappings[data[y].properties.summary] === "function";
 
         for (i = 0; i < data[y].features.length; i++) {
           // data is redundant in every element of data which is why we collect it once
@@ -5104,11 +5104,11 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
 
       if (!this._mouseHeightFocus) {
         var heightG = select(".leaflet-overlay-pane svg").append("g");
-        this._mouseHeightFocus = heightG.append('svg:line').attr('class', 'height-focus line').attr('x2', '0').attr('y2', '0').attr('x1', '0').attr('y1', '0');
-        this._mouseHeightFocusLabel = heightG.append("g").attr('class', 'height-focus label');
-        this._mouseHeightFocusLabelRect = this._mouseHeightFocusLabel.append("rect").attr('class', 'bBox');
-        this._mouseHeightFocusLabelTextElev = this._mouseHeightFocusLabel.append("text").attr('class', 'tspan');
-        this._mouseHeightFocusLabelTextType = this._mouseHeightFocusLabel.append("text").attr('class', 'tspan');
+        this._mouseHeightFocus = heightG.append("svg:line").attr("class", "height-focus line").attr("x2", "0").attr("y2", "0").attr("x1", "0").attr("y1", "0");
+        this._mouseHeightFocusLabel = heightG.append("g").attr("class", "height-focus label");
+        this._mouseHeightFocusLabelRect = this._mouseHeightFocusLabel.append("rect").attr("class", "bBox");
+        this._mouseHeightFocusLabelTextElev = this._mouseHeightFocusLabel.append("text").attr("class", "tspan");
+        this._mouseHeightFocusLabelTextType = this._mouseHeightFocusLabel.append("text").attr("class", "tspan");
         var pointG = this._pointG = heightG.append("g").attr("class", "height-focus circle");
         pointG.append("svg:circle").attr("r", 5).attr("cx", 0).attr("cy", 0).attr("class", "height-focus circle-lower");
       }
@@ -5119,9 +5119,9 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
 
       this._pointG.attr("transform", "translate(" + layerPoint.x + "," + layerPoint.y + ")").style("display", "block");
 
-      this._mouseHeightFocusLabelRect.attr("x", layerPoint.x + 3).attr("y", normalizedY).attr("class", 'bBox');
+      this._mouseHeightFocusLabelRect.attr("x", layerPoint.x + 3).attr("y", normalizedY).attr("class", "bBox");
 
-      this._mouseHeightFocusLabelTextElev.attr("x", layerPoint.x + 5).attr("y", normalizedY + 12).text(height + " m").attr("class", "tspan mouse-height-box-text");
+      this._mouseHeightFocusLabelTextElev.attr("x", layerPoint.x + 5).attr("y", normalizedY + 12).text(height * 3.281 + " ft").attr("class", "tspan mouse-height-box-text");
 
       this._mouseHeightFocusLabelTextType.attr("x", layerPoint.x + 5).attr("y", normalizedY + 24).text(type).attr("class", "tspan mouse-height-box-text");
 
@@ -5129,7 +5129,7 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
 
 
       var maxHeight = type === "" ? 12 + 6 : 2 * 12 + 6;
-      selectAll('.bBox').attr("width", maxWidth + 10).attr("height", maxHeight);
+      selectAll(".bBox").attr("width", maxWidth + 10).attr("height", maxHeight);
     },
 
     /**
@@ -5171,23 +5171,23 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
 
       this._focusRect = this._focus.append("rect").attr("x", 3).attr("y", -this._y(boxPosition)).attr("display", "none"); // text line 1
 
-      this._focusDistance = this._focus.append("text").attr("x", 7).attr("y", -this._y(boxPosition) + textDistance).attr("id", "heightgraph.distance").text(this._getTranslation('distance') + ':'); // text line 2
+      this._focusDistance = this._focus.append("text").attr("x", 7).attr("y", -this._y(boxPosition) + textDistance).attr("id", "heightgraph.distance").text(this._getTranslation("distance") + ":"); // text line 2
 
-      this._focusHeight = this._focus.append("text").attr("x", 7).attr("y", -this._y(boxPosition) + 2 * textDistance).attr("id", "heightgraph.height").text(this._getTranslation('elevation') + ':'); // text line 3
+      this._focusHeight = this._focus.append("text").attr("x", 7).attr("y", -this._y(boxPosition) + 2 * textDistance).attr("id", "heightgraph.height").text(this._getTranslation("elevation") + ":"); // text line 3
 
-      this._focusBlockDistance = this._focus.append("text").attr("x", 7).attr("y", -this._y(boxPosition) + 3 * textDistance).attr("id", "heightgraph.blockdistance").text(this._getTranslation('segment_length') + ':'); // text line 4
+      this._focusBlockDistance = this._focus.append("text").attr("x", 7).attr("y", -this._y(boxPosition) + 3 * textDistance).attr("id", "heightgraph.blockdistance").text(this._getTranslation("segment_length") + ":"); // text line 4
 
-      this._focusType = this._focus.append("text").attr("x", 7).attr("y", -this._y(boxPosition) + 4 * textDistance).attr("id", "heightgraph.type").text(this._getTranslation('type') + ':');
-      this._areaTspan = this._focusBlockDistance.append('tspan').attr("class", "tspan");
-      this._typeTspan = this._focusType.append('tspan').attr("class", "tspan");
+      this._focusType = this._focus.append("text").attr("x", 7).attr("y", -this._y(boxPosition) + 4 * textDistance).attr("id", "heightgraph.type").text(this._getTranslation("type") + ":");
+      this._areaTspan = this._focusBlockDistance.append("tspan").attr("class", "tspan");
+      this._typeTspan = this._focusType.append("tspan").attr("class", "tspan");
 
       var height = this._dynamicBoxSize(".focusbox text")[0];
 
-      selectAll('.focusbox rect').attr("height", height * textDistance + textDistance / 2).attr("display", "block");
+      selectAll(".focusbox rect").attr("height", height * textDistance + textDistance / 2).attr("display", "block");
       this._focusLineGroup = this._svg.append("g").attr("class", "focusLine");
       this._focusLine = this._focusLineGroup.append("line").attr("y1", 0).attr("y2", this._y(this._elevationBounds.min));
-      this._distTspan = this._focusDistance.append('tspan').attr("class", "tspan");
-      this._altTspan = this._focusHeight.append('tspan').attr("class", "tspan");
+      this._distTspan = this._focusDistance.append("tspan").attr("class", "tspan");
+      this._altTspan = this._focusHeight.append("tspan").attr("class", "tspan");
     },
 
     /**
@@ -5199,12 +5199,12 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
       this._elevationValueText = this._svg.append("text").attr("class", "horizontalLineText").attr("x", this._width - this._margin.left - this._margin.right - 20).attr("y", this._y(this._elevationBounds.min) - 10).attr("fill", "black"); //triangle symbol as controller
 
       var jsonTriangle = [{
-        "x": this._width - this._margin.left - this._margin.right + 7,
-        "y": this._y(this._elevationBounds.min),
-        "color": "black",
-        "type": symbolTriangle,
-        "angle": -90,
-        "size": 100
+        x: this._width - this._margin.left - this._margin.right + 7,
+        y: this._y(this._elevationBounds.min),
+        color: "black",
+        type: symbolTriangle,
+        angle: -90,
+        size: 100
       }];
 
       var dragstart = function dragstart(d) {
@@ -5226,7 +5226,7 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
           self._highlightedCoords = self._findCoordsForY(eventY);
         }
 
-        select(".horizontalLineText").attr("y", eventY <= 10 ? 0 : eventY > maxY ? maxY - 10 : eventY - 10).text(format(".0f")(self._y.invert(eventY < 0 ? 0 : eventY > maxY ? maxY : eventY)) + " m");
+        select(".horizontalLineText").attr("y", eventY <= 10 ? 0 : eventY > maxY ? maxY - 10 : eventY - 10).text(format(".0f")(self._y.invert(eventY < 0 ? 0 : eventY > maxY ? maxY : eventY) * 3.281) + " ft");
 
         self._removeMarkedSegmentsOnMap();
 
@@ -5313,18 +5313,18 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
 
       if (shortDist === true) {
         this._xAxis.tickFormat(function (d) {
-          return format(".2f")(d) + " km";
+          return format(".2f")(d / 1.852) + " nm";
         });
       } else {
         this._xAxis.tickFormat(function (d) {
-          return format(".0f")(d) + " km";
+          return format(".0f")(d / 1.852) + " nm";
         });
       }
 
       this._xAxis.ticks(this.options.xTicks ? Math.pow(2, this.options.xTicks) : Math.round(this._svgWidth / 75), "s");
 
       this._yAxis = axisLeft().scale(this._y).tickFormat(function (d) {
-        return d + " m";
+        return d * 3.281 + " ft";
       });
 
       this._yAxis.ticks(this.options.yTicks ? Math.pow(2, this.options.yTicks) : Math.round(this._svgHeight / 30), "s");
@@ -5338,10 +5338,10 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
 
       if (L.Browser.android) {
         background.on("touchstart.drag", this._dragHandler.bind(this)).on("touchstart.drag", this._dragStartHandler.bind(this)).on("touchstart.focusbox", this._mousemoveHandler.bind(this));
-        L.DomEvent.on(this._container, 'touchend', this._dragEndHandler, this);
+        L.DomEvent.on(this._container, "touchend", this._dragEndHandler, this);
       } else {
         background.on("mousemove.focusbox", this._mousemoveHandler.bind(this)).on("mouseout.focusbox", this._mouseoutHandler.bind(this)).on("mousedown.drag", this._dragStartHandler.bind(this)).on("mousemove.drag", this._dragHandler.bind(this));
-        L.DomEvent.on(this._container, 'mouseup', this._dragEndHandler, this);
+        L.DomEvent.on(this._container, "mouseup", this._dragEndHandler, this);
       }
     },
 
@@ -5353,9 +5353,9 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
 
       this._svg.append("g").attr("class", "grid").call(this._make_y_axis().tickSize(-this._svgWidth, 0, 0).ticks(Math.round(this._svgHeight / 30)).tickFormat(""));
 
-      this._svg.append('g').attr("transform", "translate(0," + this._svgHeight + ")").attr('class', 'x axis').call(this._xAxis);
+      this._svg.append("g").attr("transform", "translate(0," + this._svgHeight + ")").attr("class", "x axis").call(this._xAxis);
 
-      this._svg.append('g').attr("transform", "translate(-2,0)").attr('class', 'y axis').call(this._yAxis);
+      this._svg.append("g").attr("transform", "translate(-2,0)").attr("class", "y axis").call(this._yAxis);
     },
 
     /**
@@ -5395,19 +5395,19 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
           height = this._height - this._margin.bottom;
       var verticalItemPosition = height + this._margin.bottom / 2 + 6;
       var jsonTriangles = [{
-        "x": width - 25,
-        "y": verticalItemPosition + 3,
-        "color": "#000",
-        "type": symbolTriangle,
-        "id": "leftArrowSelection",
-        "angle": 0
+        x: width - 25,
+        y: verticalItemPosition + 3,
+        color: "#000",
+        type: symbolTriangle,
+        id: "leftArrowSelection",
+        angle: 0
       }, {
-        "x": width - 10,
-        "y": verticalItemPosition,
-        "color": "#000",
-        "type": symbolTriangle,
-        "id": "rightArrowSelection",
-        "angle": 180
+        x: width - 10,
+        y: verticalItemPosition,
+        color: "#000",
+        type: symbolTriangle,
+        id: "rightArrowSelection",
+        angle: 180
       }]; // Use update pattern to update existing symbols in case of resize
 
       var selectionSign = svg.selectAll(".select-symbol").data(jsonTriangles); // remove any existing selection first
@@ -5446,9 +5446,9 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
         }
 
         var data = [{
-          "selection": type.text
+          selection: type.text
         }];
-        self._selectionText = svg.selectAll('selection_text').data(data).enter().append('text').attr("x", width - 35).attr("y", verticalItemPosition + 4).text(function (d) {
+        self._selectionText = svg.selectAll("selection_text").data(data).enter().append("text").attr("x", width - 35).attr("y", verticalItemPosition + 4).text(function (d) {
           return d.selection;
         }).attr("class", "select-info").attr("id", "selectionText").attr("text-anchor", "end");
       };
@@ -5506,7 +5506,7 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
       var height = this._height - this._margin.bottom;
       var verticalItemPosition = height + this._margin.bottom / 2;
       var leg = [{
-        "text": this._getTranslation("legend")
+        text: this._getTranslation("legend")
       }];
       var legendRectSize = 7;
       var legendSpacing = 7;
@@ -5519,47 +5519,47 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
         return "translate(" + horizontal + "," + vertical + ")";
       });
 
-      var legendRect = legend.append('rect').attr('class', 'legend-rect').attr('x', 15).attr('y', 6 * 6).attr('width', 6).attr('height', 6);
+      var legendRect = legend.append("rect").attr("class", "legend-rect").attr("x", 15).attr("y", 6 * 6).attr("width", 6).attr("height", 6);
 
       if (Object.keys(this._graphStyle).length !== 0) {
-        legendRect.styles(this._graphStyle).style('stroke', function (d, i) {
+        legendRect.styles(this._graphStyle).style("stroke", function (d, i) {
           return d.color;
-        }).style('fill', function (d, i) {
+        }).style("fill", function (d, i) {
           return d.color;
         });
       } else {
-        legendRect.style('stroke', 'black').style('fill', function (d, i) {
+        legendRect.style("stroke", "black").style("fill", function (d, i) {
           return d.color;
         });
       }
 
-      legend.append('text').attr('class', 'legend-text').attr('x', 30).attr('y', 6 * 7).text(function (d, i) {
+      legend.append("text").attr("class", "legend-text").attr("x", 30).attr("y", 6 * 7).text(function (d, i) {
         var textProp = d.text;
         self._boxBoundY = (height - 2 * height / 3 + 7) * i;
         return textProp;
       });
 
-      var legendHover = this._svg.selectAll('.legend-hover').data(leg).enter().append('g').attr('class', 'legend-hover');
+      var legendHover = this._svg.selectAll(".legend-hover").data(leg).enter().append("g").attr("class", "legend-hover");
 
       this._showLegend = false;
-      legendHover.append('text').attr('x', 15).attr('y', verticalItemPosition).attr('text-anchor', "start").text(function (d, i) {
+      legendHover.append("text").attr("x", 15).attr("y", verticalItemPosition).attr("text-anchor", "start").text(function (d, i) {
         return d.text;
-      }).on('mouseover', function () {
-        selectAll('.legend').style("display", "block");
-      }).on('mouseleave', function () {
+      }).on("mouseover", function () {
+        selectAll(".legend").style("display", "block");
+      }).on("mouseleave", function () {
         if (!_this._showLegend) {
-          selectAll('.legend').style("display", "none");
+          selectAll(".legend").style("display", "none");
         }
-      }).on('click', function () {
+      }).on("click", function () {
         _this._showLegend = !_this._showLegend;
       });
     },
 
     /**
-    * calculates the margins of boxes
-    * @param {String} className: name of the class
-    * @return {array} borders: number of text lines, widest range of text
-    */
+     * calculates the margins of boxes
+     * @param {String} className: name of the class
+     * @return {array} borders: number of text lines, widest range of text
+     */
     _dynamicBoxSize: function _dynamicBoxSize(className) {
       var cnt = selectAll(className).nodes().length;
       var widths = [];
@@ -5586,18 +5586,18 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
         return y(d.altitude);
       }).curve(curveBasis);
 
-      this._svg.append("svg:path").attr("d", borderTopLine(data)).attr('class', 'border-top');
+      this._svg.append("svg:path").attr("d", borderTopLine(data)).attr("class", "border-top");
     },
 
     /*
      * Handles the mouseout event when the mouse leaves the background
      */
     _mouseoutHandler: function _mouseoutHandler() {
-      for (var _i = 0, _arr = ['_focusLine', '_focus', '_pointG', '_mouseHeightFocus', '_mouseHeightFocusLabel']; _i < _arr.length; _i++) {
+      for (var _i = 0, _arr = ["_focusLine", "_focus", "_pointG", "_mouseHeightFocus", "_mouseHeightFocusLabel"]; _i < _arr.length; _i++) {
         var param = _arr[_i];
 
         if (this[param]) {
-          this[param].style('display', 'none');
+          this[param].style("display", "none");
         }
       }
     },
@@ -5709,17 +5709,17 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
         this._showMapMarker(ll, alt, type);
       }
 
-      this._distTspan.text(" " + dist.toFixed(1) + ' km');
+      this._distTspan.text(" " + (dist / 1.852).toFixed(1) + "nm");
 
-      this._altTspan.text(" " + alt + ' m');
+      this._altTspan.text(" " + alt * 3.281 + " ft");
 
-      this._areaTspan.text(" " + areaLength.toFixed(1) + ' km');
+      this._areaTspan.text(" " + (areaLength / 1.852).toFixed(1) + " nm");
 
       this._typeTspan.text(" " + type);
 
       this._focusRect.attr("width", boxWidth);
 
-      this._focusLine.style("display", "block").attr('x1', this._x(dist)).attr('x2', this._x(dist));
+      this._focusLine.style("display", "block").attr("x1", this._x(dist)).attr("x2", this._x(dist));
 
       var xPositionBox = this._x(dist) - (boxWidth + 5);
       var totalWidth = this._width - this._margin.left - this._margin.right;
@@ -5794,7 +5794,7 @@ var schemeSet3 = colors("8dd3c7ffffb3bebadafb807280b1d3fdb462b3de69fccde5d9d9d9b
       if (this.options.translation[key]) return this.options.translation[key];
       if (this._defaultTranslation[key]) return this._defaultTranslation[key];
       console.error("Unexpected error when looking up the translation for " + key);
-      return 'No translation found';
+      return "No translation found";
     }
   });
 
