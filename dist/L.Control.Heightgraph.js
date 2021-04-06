@@ -5121,7 +5121,7 @@ function drag() {
 
       this._mouseHeightFocusLabelRect.attr("x", layerPoint.x + 3).attr("y", normalizedY).attr("class", "bBox");
 
-      this._mouseHeightFocusLabelTextElev.attr("x", layerPoint.x + 5).attr("y", normalizedY + 12).text(height * 3.281 + " ft").attr("class", "tspan mouse-height-box-text");
+      this._mouseHeightFocusLabelTextElev.attr("x", layerPoint.x + 5).attr("y", normalizedY + 12).text((height * 3.281).toFixed(0) + " ft").attr("class", "tspan mouse-height-box-text");
 
       this._mouseHeightFocusLabelTextType.attr("x", layerPoint.x + 5).attr("y", normalizedY + 24).text(type).attr("class", "tspan mouse-height-box-text");
 
@@ -5226,7 +5226,7 @@ function drag() {
           self._highlightedCoords = self._findCoordsForY(eventY);
         }
 
-        select(".horizontalLineText").attr("y", eventY <= 10 ? 0 : eventY > maxY ? maxY - 10 : eventY - 10).text(format(".0f")(self._y.invert(eventY < 0 ? 0 : eventY > maxY ? maxY : eventY) * 3.281) + " ft");
+        select(".horizontalLineText").attr("y", eventY <= 10 ? 0 : eventY > maxY ? maxY - 10 : eventY - 10).text(format(".0f")((self._y.invert(eventY < 0 ? 0 : eventY > maxY ? maxY : eventY) * 3.281).toFixed(0)) + " ft");
 
         self._removeMarkedSegmentsOnMap();
 
@@ -5324,7 +5324,7 @@ function drag() {
       this._xAxis.ticks(this.options.xTicks ? Math.pow(2, this.options.xTicks) : Math.round(this._svgWidth / 75), "s");
 
       this._yAxis = axisLeft().scale(this._y).tickFormat(function (d) {
-        return d * 3.281 + " ft";
+        return (d * 3.281).toFixed(0) + " ft";
       });
 
       this._yAxis.ticks(this.options.yTicks ? Math.pow(2, this.options.yTicks) : Math.round(this._svgHeight / 30), "s");
@@ -5711,7 +5711,7 @@ function drag() {
 
       this._distTspan.text(" " + (dist / 1.852).toFixed(1) + "nm");
 
-      this._altTspan.text(" " + alt * 3.281 + " ft");
+      this._altTspan.text(" " + (alt * 3.281).toFixed(0) + " ft");
 
       this._areaTspan.text(" " + (areaLength / 1.852).toFixed(1) + " nm");
 
