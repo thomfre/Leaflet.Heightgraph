@@ -1,4 +1,6 @@
 {
+  "name": "leaflet.heightgraph",
+  "version": "1.4.2",
   "files": ["dist/**"],
   "main": "dist/index.js"
 }
