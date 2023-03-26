@@ -6,7 +6,7 @@
   "module": "dist/L.Control.Heightgraph.min.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/GIScience/Leaflet.Heightgraph.git"
+    "url": "https://github.com/thomfre/Leaflet.Heightgraph.git"
   },
   "scripts": {
     "start": "npm run dev",
